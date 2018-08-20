@@ -8,7 +8,7 @@ import numpy as np
 import re
 from convertXLStoXLSX import writeToExcelXLSX
 
-LIMIT_LENGTH_OF_SENTENCES = 200
+LIMIT_LENGTH_OF_SENTENCES = 300
 
 def readFileTSV(dirname='../train_tsv'):
     sentences = []
@@ -208,10 +208,34 @@ if __name__ == '__main__':
     encoded_labels = encode_labels(labels, max_doc_len, labels_template) #chứa labels dạng số
 
     vocabs = get_vocabs(sentences, sequence_lengths, max_doc_len)
-    lookup_table, index_of_word_in_lookup_table = generate_lookup_word_embedding(vocabs)
-    encoded_sentences = encode_sentences(sentences, max_doc_len, lookup_table, index_of_word_in_lookup_table) #chứa sentence dạng số
+    # lookup_table, index_of_word_in_lookup_table = generate_lookup_word_embedding(vocabs)
+    # encoded_sentences = encode_sentences(sentences, max_doc_len, lookup_table, index_of_word_in_lookup_table) #chứa sentence dạng số
 
-    print("sents shape: ", encoded_sentences.shape)
-    print("labels shape: ", encoded_labels.shape)
-    print("lengths shape: ", sequence_lengths.shape)
+    # print("sents shape: ", encoded_sentences.shape)
+    # print("labels shape: ", encoded_labels.shape)
+    # print("lengths shape: ", sequence_lengths.shape)
     
+    max_word_len = 0
+    for w in vocabs:
+        max_word_len = max(len(w), max_word_len)
+
+    print("Max word len: ", max_word_len)
+
+    for w in vocabs:
+        if len(w) == max_word_len:
+            print(w)
+
+
+    cnt_labels_temp = dict()
+
+    for label in labels:
+        for sublabel in label:
+            tag = re.split('-', sublabel)[0]
+            if tag == 'B':
+                if sublabel not in cnt_labels_temp:
+                    cnt_labels_temp[sublabel] = 0
+                cnt_labels_temp[sublabel] += 1
+
+    for label in cnt_labels_temp:
+        print(label, end='\t')
+        print(cnt_labels_temp[label])
