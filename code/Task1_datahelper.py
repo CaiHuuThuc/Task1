@@ -6,6 +6,7 @@ import shelve
 import gensim
 import numpy as np
 import re
+from time import time
 from convertXLStoXLSX import writeToExcelXLSX
 
 LIMIT_LENGTH_OF_SENTENCES = 300
@@ -47,26 +48,27 @@ def get_vocabs(sentences, sequence_lengths, max_doc_len):
         for subidx in range(min(max_doc_len, sequence_lengths[idx])):
             if sentence[subidx] not in vocabs:
                 vocabs.append(sentence[subidx])
-    vocabs.append(' ')
+    vocabs.append('')
     return vocabs
 
 def generate_char_dict():
     char_dict = {}
-    alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789-,;.!?:’"/|_#$%ˆ&*˜‘+=<>()[]{} '
+    alphabet = ' abcdefghijklmnopqrstuvwxyz0123456789-,;.!?:’"/|_#$%ˆ&*˜‘+=<>()[]{}'
     for i,c in enumerate(alphabet):
-        char_dict[c] = i+1
+        char_dict[c] = i
     return char_dict
 
-def char2vec(word, max_word_len, char_dict):
-    data = np.zeros(max_word_len)
+def word_2_indices_per_char(word, max_word_len, char_dict):
+    data = np.zeros(max_word_len, dtype=np.int32)
+    rest = max_word_len - len(word)
     for i in range(0, len(word)):
         if i >= max_word_len:
             break
         elif word[i] in char_dict:
-            data[i] = char_dict[word[i]]
+            data[i + rest//2] = char_dict[word[i]]
         else:
-            # unknown character set to be 68
-            data[i] = len(char_dict.keys())
+            # unknown character set to be 0
+            data[i + rest//2] = 0
     return data
 
 def generate_lookup_word_embedding(vocabs, filename='../bio-domain word2vec/PubMed-shuffle-win-30.bin'):
@@ -148,7 +150,7 @@ def get_max_doc_len(sequence_lengths):
 def add_padding(sentences, labels, sequence_lengths, max_doc_len, dims=200):
     for idx, leng in enumerate(sequence_lengths):
         gap = LIMIT_LENGTH_OF_SENTENCES - leng
-        sentences[idx].extend([' ']*gap)
+        sentences[idx].extend(['']*gap)
         labels[idx].extend(['PAD']*gap)
     
 
@@ -177,6 +179,21 @@ def get_word_from_idx(index_of_word_in_lookup_table, idx):
         if index_of_word_in_lookup_table[word] == int(idx):
             return word
     return ' '
+
+def word_indices_to_char_indices(sents, lengths, max_doc_len, max_word_len, char_dict, index_of_word_in_lookup_table):
+    batch_size = sents.shape[0]
+    res = np.zeros(shape=[batch_size, max_doc_len, max_word_len], dtype=np.int32)
+    for idx_sent, sentence in enumerate(sents):
+        for idx_word, word_indices in enumerate(sentence):
+            if idx_word < lengths[idx_sent]:
+                word = get_word_from_idx(index_of_word_in_lookup_table, word_indices)
+                char_indices = word_2_indices_per_char(word, max_word_len, char_dict)
+                res[idx_sent, idx_word, :] = char_indices
+            else:
+                res[idx_sent, idx_word, :] = np.zeros(max_word_len, dtype=np.int32)
+    return res
+
+
 def preprocess():
     sentences, labels, sequence_lengths = readFileTSV()
     max_doc_len = get_max_doc_len(sequence_lengths)
@@ -195,47 +212,33 @@ def preprocess():
     data['max_doc_len'] = max_doc_len
     data['word_embedding_lookup_table'] = lookup_table
     data['index_of_word_in_lookup_table'] = index_of_word_in_lookup_table
+    data['max_word_len'] = 30
     return data    
 
 
 if __name__ == '__main__':
-    sentences, labels, sequence_lengths = readFileTSV()
-    max_doc_len = get_max_doc_len(sequence_lengths)
-    add_padding(sentences, labels, sequence_lengths, max_doc_len)
+    data = preprocess()
 
-    #lấy toàn bộ label và unique, đưa vào labels_template
-    labels_template = get_labels_template(labels)
-    encoded_labels = encode_labels(labels, max_doc_len, labels_template) #chứa labels dạng số
+    max_doc_len = data['max_doc_len']
+    max_word_len = data['max_word_len']
+    labels_template = data['labels_template']
 
-    vocabs = get_vocabs(sentences, sequence_lengths, max_doc_len)
-    # lookup_table, index_of_word_in_lookup_table = generate_lookup_word_embedding(vocabs)
-    # encoded_sentences = encode_sentences(sentences, max_doc_len, lookup_table, index_of_word_in_lookup_table) #chứa sentence dạng số
+    train_sentences = data["train_sentences"]
+    train_labels = data["train_labels"]
+    train_sequence_lengths = data["train_sequence_lengths"]
 
-    # print("sents shape: ", encoded_sentences.shape)
-    # print("labels shape: ", encoded_labels.shape)
-    # print("lengths shape: ", sequence_lengths.shape)
-    
-    max_word_len = 0
-    for w in vocabs:
-        max_word_len = max(len(w), max_word_len)
+    dev_sents = data["dev_sentences"]
+    dev_labels = data["dev_labels"]
+    dev_sequence_lengths = data["dev_sequence_lengths"]
 
-    print("Max word len: ", max_word_len)
-
-    for w in vocabs:
-        if len(w) == max_word_len:
-            print(w)
-
-
-    cnt_labels_temp = dict()
-
-    for label in labels:
-        for sublabel in label:
-            tag = re.split('-', sublabel)[0]
-            if tag == 'B':
-                if sublabel not in cnt_labels_temp:
-                    cnt_labels_temp[sublabel] = 0
-                cnt_labels_temp[sublabel] += 1
-
-    for label in cnt_labels_temp:
-        print(label, end='\t')
-        print(cnt_labels_temp[label])
+    word_lookup_table = data['word_embedding_lookup_table']
+    index_of_word_in_lookup_table = data['index_of_word_in_lookup_table']
+    char_dict = generate_char_dict()
+    batches = batch_iter(train_sentences, train_labels, train_sequence_lengths, batch_size=32, num_epochs=1, shuffle=True)
+    print("Start")
+    t = time()
+    for i, batch in enumerate(batches): 
+        sent_batch, label_batch, sequence_length_batch = batch
+        word_indices = word_indices_to_char_indices(sent_batch, sequence_length_batch, max_doc_len, max_word_len, char_dict, index_of_word_in_lookup_table)
+    print("End")
+    print(time() - t)

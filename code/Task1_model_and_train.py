@@ -38,7 +38,7 @@ labels_placeholder = tf.placeholder(tf.int32, shape=[None,max_doc_len], name='la
 sequence_lengths_placeholder = tf.placeholder(tf.int32, shape=[None], name='lengths')
 
 with tf.variable_scope('word-embedding-layer'):
-    W_embedding = tf.Variable(initial_value=word_lookup_table, dtype=tf.float32, trainable=False, name='word-embedding')
+    W_embedding = tf.Variable(initial_value=word_lookup_table, dtype=tf.float32, trainable=True, name='word-embedding')
     vectors = tf.nn.embedding_lookup(W_embedding, sentences_placeholder)
 
 with tf.variable_scope("bi-lstm"):
