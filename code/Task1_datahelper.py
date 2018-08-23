@@ -7,7 +7,7 @@ import gensim
 import numpy as np
 import re
 from time import time
-from convertXLStoXLSX import writeToExcelXLSX
+import pickle
 
 LIMIT_LENGTH_OF_SENTENCES = 300
 
@@ -193,6 +193,40 @@ def word_indices_to_char_indices(sents, lengths, max_doc_len, max_word_len, char
                 res[idx_sent, idx_word, :] = np.zeros(max_word_len, dtype=np.int32)
     return res
 
+def write_to_file(data, filename='../train_dev_data.shlv'):
+    with shelve.open(filename) as f:
+        f['labels_template'] = data['labels_template']
+        f['max_doc_len'] = data['max_doc_len']
+        f['word_embedding_lookup_table'] = data['word_embedding_lookup_table']
+        f['index_of_word_in_lookup_table'] = data['index_of_word_in_lookup_table']
+        f['max_word_len'] = data['max_word_len']
+
+        f["train_sentences"] = data["train_sentences"]
+        f["train_labels"] = data["train_labels"]
+        f["train_sequence_lengths"] = data["train_sequence_lengths"]
+
+        f["dev_sentences"] = data["dev_sentences"]
+        f["dev_labels"] = data["dev_labels"]
+        f["dev_sequence_lengths"] = data["dev_sequence_lengths"]
+    
+def load_from_file(filename='../train_dev_data.shlv'):
+    data = dict()
+    with shelve.open(filename) as f:
+        data['labels_template'] = f['labels_template']
+        data['max_doc_len'] = f['max_doc_len']
+        data['word_embedding_lookup_table'] = f['word_embedding_lookup_table']
+        data['index_of_word_in_lookup_table'] = f['index_of_word_in_lookup_table']
+        data['max_word_len'] = f['max_word_len']
+
+        data["train_sentences"] = f["train_sentences"]
+        data["train_labels"] = f["train_labels"]
+        data["train_sequence_lengths"] = f["train_sequence_lengths"]
+
+        data["dev_sentences"] = f["dev_sentences"]
+        data["dev_labels"] = f["dev_labels"]
+        data["dev_sequence_lengths"] = f["dev_sequence_lengths"]
+
+    return data
 
 def preprocess():
     sentences, labels, sequence_lengths = readFileTSV()
@@ -213,32 +247,19 @@ def preprocess():
     data['word_embedding_lookup_table'] = lookup_table
     data['index_of_word_in_lookup_table'] = index_of_word_in_lookup_table
     data['max_word_len'] = 30
-    return data    
+    write_to_file(data)   
 
 
 if __name__ == '__main__':
-    data = preprocess()
+    preprocess()
 
-    max_doc_len = data['max_doc_len']
-    max_word_len = data['max_word_len']
-    labels_template = data['labels_template']
 
-    train_sentences = data["train_sentences"]
-    train_labels = data["train_labels"]
-    train_sequence_lengths = data["train_sequence_lengths"]
-
-    dev_sents = data["dev_sentences"]
-    dev_labels = data["dev_labels"]
-    dev_sequence_lengths = data["dev_sequence_lengths"]
-
-    word_lookup_table = data['word_embedding_lookup_table']
-    index_of_word_in_lookup_table = data['index_of_word_in_lookup_table']
-    char_dict = generate_char_dict()
-    batches = batch_iter(train_sentences, train_labels, train_sequence_lengths, batch_size=32, num_epochs=1, shuffle=True)
-    print("Start")
-    t = time()
-    for i, batch in enumerate(batches): 
-        sent_batch, label_batch, sequence_length_batch = batch
-        word_indices = word_indices_to_char_indices(sent_batch, sequence_length_batch, max_doc_len, max_word_len, char_dict, index_of_word_in_lookup_table)
-    print("End")
-    print(time() - t)
+    # char_dict = generate_char_dict()
+    # batches = batch_iter(train_sentences, train_labels, train_sequence_lengths, batch_size=32, num_epochs=1, shuffle=True)
+    # print("Start")
+    # t = time()
+    # for i, batch in enumerate(batches): 
+    #     sent_batch, label_batch, sequence_length_batch = batch
+    #     word_indices = word_indices_to_char_indices(sent_batch, sequence_length_batch, max_doc_len, max_word_len, char_dict, index_of_word_in_lookup_table)
+    # print("End")
+    # print(time() - t)

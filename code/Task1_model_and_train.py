@@ -6,7 +6,7 @@ import time
 import csv
 from Task1_datahelper import *
 
-data = preprocess()
+data = load_from_file()
 
 max_doc_len = data['max_doc_len']
 labels_template = data['labels_template']
@@ -76,6 +76,7 @@ with tf.Session() as sess:
 
     step = 0
     batches = batch_iter(train_sentences, train_labels, train_sequence_lengths, batch_size=batch_size, num_epochs=n_epochs, shuffle=True)
+    timer = time()
     for batch in batches: 
         sent_batch, label_batch, sequence_length_batch = batch
 
@@ -86,9 +87,10 @@ with tf.Session() as sess:
                                                                             })
         step += 1
         if step % 100 == 0:
-            print("Step %d/%d Loss: %f" % (step, n_batches*n_epochs, loss_))
+            print("Step %d/%d Loss: %f" % (step, n_batches*n_epochs, loss_), end='\t')
+            print('Took %fs' % (time() - timer))
+            timer = time()
             
-        
     print()
 
     del train_sentences, train_labels, train_sequence_lengths
