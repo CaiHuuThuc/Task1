@@ -2,10 +2,17 @@ import os
 import shelve
 import numpy as np
 import tensorflow as tf
+<<<<<<< HEAD
 from time import time
 from Task1_datahelper import load_from_file, word_2_indices_per_char, decode_labels, batch_iter, get_word_from_idx
 from my_eval import my_eval
 from math import sqrt
+=======
+import time
+import csv
+from Task1_datahelper import *
+
+>>>>>>> abf7ed34cd308cf122d0141a4b7ab64e052425bb
 data = load_from_file()
 
 max_doc_len = data['max_doc_len']
@@ -104,6 +111,7 @@ with tf.Session() as sess:
         precision, recall, F1 = my_eval(sent_batch, decode_labels(label_batch, labels_template), decode_labels(predicts, labels_template), sequence_length_batch)
         step += 1
         if step % 100 == 0:
+<<<<<<< HEAD
             summary['step'].append(step)
             summary['loss'].append(loss_)
             summary['precision'].append(precision)
@@ -114,6 +122,12 @@ with tf.Session() as sess:
             timer = time()
             saver.save(sess, '../saved-model/baseline/baseline', global_step=step)
 
+=======
+            print("Step %d/%d Loss: %f" % (step, n_batches*n_epochs, loss_), end='\t')
+            print('Took %fs' % (time() - timer))
+            timer = time()
+            
+>>>>>>> abf7ed34cd308cf122d0141a4b7ab64e052425bb
     print()
 
     del train_sentences, train_labels, train_sequence_lengths
