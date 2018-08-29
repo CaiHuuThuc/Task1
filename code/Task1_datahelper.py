@@ -229,40 +229,6 @@ def load_from_file(filename='../train_dev_data.shlv'):
 
     return data
 
-def write_to_file(data, filename='../train_dev_data.shlv'):
-    with shelve.open(filename) as f:
-        f['labels_template'] = data['labels_template']
-        f['max_doc_len'] = data['max_doc_len']
-        f['word_embedding_lookup_table'] = data['word_embedding_lookup_table']
-        f['index_of_word_in_lookup_table'] = data['index_of_word_in_lookup_table']
-        f['max_word_len'] = data['max_word_len']
-
-        f["train_sentences"] = data["train_sentences"]
-        f["train_labels"] = data["train_labels"]
-        f["train_sequence_lengths"] = data["train_sequence_lengths"]
-
-        f["dev_sentences"] = data["dev_sentences"]
-        f["dev_labels"] = data["dev_labels"]
-        f["dev_sequence_lengths"] = data["dev_sequence_lengths"]
-    
-def load_from_file(filename='../train_dev_data.shlv'):
-    data = dict()
-    with shelve.open(filename) as f:
-        data['labels_template'] = f['labels_template']
-        data['max_doc_len'] = f['max_doc_len']
-        data['word_embedding_lookup_table'] = f['word_embedding_lookup_table']
-        data['index_of_word_in_lookup_table'] = f['index_of_word_in_lookup_table']
-        data['max_word_len'] = f['max_word_len']
-
-        data["train_sentences"] = f["train_sentences"]
-        data["train_labels"] = f["train_labels"]
-        data["train_sequence_lengths"] = f["train_sequence_lengths"]
-
-        data["dev_sentences"] = f["dev_sentences"]
-        data["dev_labels"] = f["dev_labels"]
-        data["dev_sequence_lengths"] = f["dev_sequence_lengths"]
-
-    return data
 
 def next_lr(lr, p=0.05, t=180):
     return 1.0*lr/(1.0 + p*t)
@@ -277,23 +243,12 @@ if __name__ == '__main__':
         labels_template = get_labels_template(labels)
         encoded_labels = encode_labels(labels, max_doc_len, labels_template) #chứa labels dạng số #cần tối ưu
 
-<<<<<<< HEAD
         vocabs = get_vocabs(sentences, sequence_lengths, max_doc_len)
         lookup_table, index_of_word_in_lookup_table = generate_lookup_word_embedding(vocabs)
         encoded_sentences = encode_sentences(sentences, max_doc_len, lookup_table, index_of_word_in_lookup_table) #chứa sentence dạng số
-=======
-    data = train_dev_split(encoded_sentences, encoded_labels, sequence_lengths, train_ratio=0.8)
-    data['labels_template'] = labels_template
-    data['max_doc_len'] = max_doc_len
-    data['word_embedding_lookup_table'] = lookup_table
-    data['index_of_word_in_lookup_table'] = index_of_word_in_lookup_table
-    data['max_word_len'] = 30
-    write_to_file(data)   
->>>>>>> abf7ed34cd308cf122d0141a4b7ab64e052425bb
 
         char_dict = generate_char_dict()
 
-<<<<<<< HEAD
         data = train_dev_split(encoded_sentences, encoded_labels, sequence_lengths, train_ratio=0.8)
         data['labels_template'] = labels_template
         data['max_doc_len'] = max_doc_len
@@ -332,18 +287,3 @@ if __name__ == '__main__':
                 word = get_word_from_idx(index_of_word_in_lookup_table, dev_sentences[idx][subidx])
                 label = labels_template[dev_labels[idx][subidx]]
                 f.write("%s\t%s\n" % (word, label))
-=======
-if __name__ == '__main__':
-    preprocess()
-
-
-    # char_dict = generate_char_dict()
-    # batches = batch_iter(train_sentences, train_labels, train_sequence_lengths, batch_size=32, num_epochs=1, shuffle=True)
-    # print("Start")
-    # t = time()
-    # for i, batch in enumerate(batches): 
-    #     sent_batch, label_batch, sequence_length_batch = batch
-    #     word_indices = word_indices_to_char_indices(sent_batch, sequence_length_batch, max_doc_len, max_word_len, char_dict, index_of_word_in_lookup_table)
-    # print("End")
-    # print(time() - t)
->>>>>>> abf7ed34cd308cf122d0141a4b7ab64e052425bb

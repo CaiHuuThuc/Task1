@@ -44,16 +44,15 @@ chars_placeholder = tf.placeholder(tf.int32, shape=[None, max_doc_len*max_word_l
 sentences_placeholder = tf.placeholder(tf.int32, shape=[None, max_doc_len], name='sentences')
 labels_placeholder = tf.placeholder(tf.int32, shape=[None,max_doc_len], name='labels')
 sequence_lengths_placeholder = tf.placeholder(tf.int32, shape=[None], name='lengths')
-dropout_prob_placeholder = tf.placeholder(tf.float32, name='dropout')
-learning_rate_placeholder = tf.placeholder(tf.float32, name='lr')
+dropout_prob_placeholder = tf.placeholder_with_default(1.0, shape=())
 
 with tf.variable_scope('char-embedding', reuse=tf.AUTO_REUSE):
     W_char_embedding = tf.get_variable(name="char-embedding", \
-                                        initializer=np.random.uniform(-sqrt(3.0/char_embedding_size), sqrt(3.0/char_embedding_size)),\
+                                        initializer=tf.constant_initializer(np.random.uniform(-sqrt(3.0/char_embedding_size), sqrt(3.0/char_embedding_size))),\
                                         shape=[len(char_dict.keys()), char_embedding_size])
     char_embedding = tf.nn.embedding_lookup(W_char_embedding, chars_placeholder)
     char_embedding = tf.nn.dropout(char_embedding, dropout_prob_placeholder)
-    
+
 with tf.variable_scope('char-cnn', reuse=tf.AUTO_REUSE):
     window_size = 3
 
@@ -85,9 +84,11 @@ with tf.variable_scope("bi-lstm"):
 
 with tf.variable_scope("projection", reuse=tf.AUTO_REUSE):
     r_plus_c = 2*hidden_size_lstm + num_classes
-    W = tf.get_variable("W", dtype=tf.float32, initializer=np.random.uniform(-sqrt(6.0/r_plus_c), sqrt(6.0/r_plus_c)),shape=[2*hidden_size_lstm, num_classes])
+    W = tf.get_variable("W", dtype=tf.float32, initializer=tf.constant_initializer(np.random.uniform(-sqrt(6.0/r_plus_c), sqrt(6.0/r_plus_c))),\
+                                                    shape=[2*hidden_size_lstm, num_classes])
 
-    b = tf.get_variable("b", shape=[num_classes],dtype=tf.float32, initializer=np.random.uniform(-sqrt(6.0/r_plus_c), sqrt(6.0/r_plus_c)))
+    b = tf.get_variable("b", shape=[num_classes],dtype=tf.float32, \
+                                        initializer=tf.constant_initializer(np.random.uniform(-sqrt(6.0/r_plus_c), sqrt(6.0/r_plus_c))))
 
     output = tf.reshape(output, [-1, 2*hidden_size_lstm])
     pred = tf.matmul(output, W) + b
@@ -119,12 +120,13 @@ with tf.Session(config = config) as sess:
     for batch in batches: 
         sent_batch, label_batch, sequence_length_batch = batch
         loss_, _, predicts = sess.run([loss, optimizer, viterbi_sequence], feed_dict={
+                                                                                dropout_prob_placeholder: dropout_prob,
                                                                                 sentences_placeholder: sent_batch, 
                                                                                 labels_placeholder: label_batch, 
                                                                                 sequence_lengths_placeholder: sequence_length_batch,
-                                                                                chars_placeholder: word_indices_to_char_indices(sent_batch, sequence_length_batch, max_doc_len, max_word_len, char_dict, index_of_word_in_lookup_table),
-                                                                                dropout_prob_placeholder = dropout_prob,
-                                                                                learning_rate_placeholder = next_lr(learning_rate)
+                                                                                chars_placeholder: word_indices_to_char_indices(sent_batch, \
+                                                                                        sequence_length_batch, max_doc_len, max_word_len, char_dict, index_of_word_in_lookup_table)
+                                                                                
                                                                             })
         step += 1
         if step % 100 == 0:
@@ -132,7 +134,7 @@ with tf.Session(config = config) as sess:
             print("Step %d/%d Loss: %f\tPrecision: %f\tRecall: %f\tF1: %f" % (step, n_batches*n_epochs, loss_, precision, recall, F1), end='\t')
             print('Took %fs' % (time() - timer))
             timer = time()
-            
+            break
         
     print()
 
