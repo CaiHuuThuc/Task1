@@ -1,4 +1,3 @@
-
 import os
 import csv
 import numpy as np
@@ -7,7 +6,7 @@ import gensim
 import numpy as np
 import re
 from time import time
-from convertXLStoXLSX import writeToExcelXLSX
+import pickle
 
 LIMIT_LENGTH_OF_SENTENCES = 300
 
@@ -190,55 +189,101 @@ def word_indices_to_char_indices(sents, lengths, max_doc_len, max_word_len, char
                 char_indices = word_2_indices_per_char(word, max_word_len, char_dict)
                 res[idx_sent, idx_word, :] = char_indices
             else:
-                res[idx_sent, idx_word, :] = np.zeros(max_word_len, dtype=np.int32)
-    return res
+                break
+    return res.reshape((batch_size, max_doc_len*max_word_len))
+
+def write_to_file(data, filename='../train_dev_data.shlv'):
+    with shelve.open(filename) as f:
+        f['labels_template'] = data['labels_template']
+        f['max_doc_len'] = data['max_doc_len']
+        f['word_embedding_lookup_table'] = data['word_embedding_lookup_table']
+        f['index_of_word_in_lookup_table'] = data['index_of_word_in_lookup_table']
+        f['max_word_len'] = data['max_word_len']
+
+        f["train_sentences"] = data["train_sentences"]
+        f["train_labels"] = data["train_labels"]
+        f["train_sequence_lengths"] = data["train_sequence_lengths"]
+
+        f["dev_sentences"] = data["dev_sentences"]
+        f["dev_labels"] = data["dev_labels"]
+        f["dev_sequence_lengths"] = data["dev_sequence_lengths"]
+        f['char_dict'] = data['char_dict']
+    
+def load_from_file(filename='../train_dev_data.shlv'):
+    data = dict()
+    with shelve.open(filename) as f:
+        data['labels_template'] = f['labels_template']
+        data['max_doc_len'] = f['max_doc_len']
+        data['word_embedding_lookup_table'] = f['word_embedding_lookup_table']
+        data['index_of_word_in_lookup_table'] = f['index_of_word_in_lookup_table']
+        data['max_word_len'] = f['max_word_len']
+
+        data["train_sentences"] = f["train_sentences"]
+        data["train_labels"] = f["train_labels"]
+        data["train_sequence_lengths"] = f["train_sequence_lengths"]
+
+        data["dev_sentences"] = f["dev_sentences"]
+        data["dev_labels"] = f["dev_labels"]
+        data["dev_sequence_lengths"] = f["dev_sequence_lengths"]
+        data['char_dict'] = f['char_dict']
+
+    return data
 
 
-def preprocess():
-    sentences, labels, sequence_lengths = readFileTSV()
-    max_doc_len = get_max_doc_len(sequence_lengths)
-    add_padding(sentences, labels, sequence_lengths, max_doc_len)
-
-    #lấy toàn bộ label và unique, đưa vào labels_template
-    labels_template = get_labels_template(labels)
-    encoded_labels = encode_labels(labels, max_doc_len, labels_template) #chứa labels dạng số #cần tối ưu
-
-    vocabs = get_vocabs(sentences, sequence_lengths, max_doc_len)
-    lookup_table, index_of_word_in_lookup_table = generate_lookup_word_embedding(vocabs)
-    encoded_sentences = encode_sentences(sentences, max_doc_len, lookup_table, index_of_word_in_lookup_table) #chứa sentence dạng số
-
-    data = train_dev_split(encoded_sentences, encoded_labels, sequence_lengths, train_ratio=0.8)
-    data['labels_template'] = labels_template
-    data['max_doc_len'] = max_doc_len
-    data['word_embedding_lookup_table'] = lookup_table
-    data['index_of_word_in_lookup_table'] = index_of_word_in_lookup_table
-    data['max_word_len'] = 30
-    return data    
-
+def next_lr(lr, p=0.05, t=180):
+    return 1.0*lr/(1.0 + p*t)
 
 if __name__ == '__main__':
-    data = preprocess()
+    def preprocess():
+        sentences, labels, sequence_lengths = readFileTSV()
+        max_doc_len = get_max_doc_len(sequence_lengths)
+        add_padding(sentences, labels, sequence_lengths, max_doc_len)
+
+        #lấy toàn bộ label và unique, đưa vào labels_template
+        labels_template = get_labels_template(labels)
+        encoded_labels = encode_labels(labels, max_doc_len, labels_template) #chứa labels dạng số #cần tối ưu
+
+        vocabs = get_vocabs(sentences, sequence_lengths, max_doc_len)
+        lookup_table, index_of_word_in_lookup_table = generate_lookup_word_embedding(vocabs)
+        encoded_sentences = encode_sentences(sentences, max_doc_len, lookup_table, index_of_word_in_lookup_table) #chứa sentence dạng số
+
+        char_dict = generate_char_dict()
+
+        data = train_dev_split(encoded_sentences, encoded_labels, sequence_lengths, train_ratio=0.8)
+        data['labels_template'] = labels_template
+        data['max_doc_len'] = max_doc_len
+        data['word_embedding_lookup_table'] = lookup_table
+        data['index_of_word_in_lookup_table'] = index_of_word_in_lookup_table
+        data['max_word_len'] = 30
+        data['char_dict'] = char_dict
+        write_to_file(data)   
+
+    data = load_from_file()
 
     max_doc_len = data['max_doc_len']
-    max_word_len = data['max_word_len']
     labels_template = data['labels_template']
 
     train_sentences = data["train_sentences"]
     train_labels = data["train_labels"]
     train_sequence_lengths = data["train_sequence_lengths"]
 
-    dev_sents = data["dev_sentences"]
+    dev_sentences = data["dev_sentences"]
     dev_labels = data["dev_labels"]
     dev_sequence_lengths = data["dev_sequence_lengths"]
 
     word_lookup_table = data['word_embedding_lookup_table']
     index_of_word_in_lookup_table = data['index_of_word_in_lookup_table']
-    char_dict = generate_char_dict()
-    batches = batch_iter(train_sentences, train_labels, train_sequence_lengths, batch_size=32, num_epochs=1, shuffle=True)
-    print("Start")
-    t = time()
-    for i, batch in enumerate(batches): 
-        sent_batch, label_batch, sequence_length_batch = batch
-        word_indices = word_indices_to_char_indices(sent_batch, sequence_length_batch, max_doc_len, max_word_len, char_dict, index_of_word_in_lookup_table)
-    print("End")
-    print(time() - t)
+
+    with open('data_train.tsv', 'w') as f:
+        for idx in range(len(train_sequence_lengths)):
+            for subidx in range(train_sequence_lengths[idx]):
+                word = get_word_from_idx(index_of_word_in_lookup_table, train_sentences[idx][subidx])
+                label = labels_template[train_labels[idx][subidx]]
+                f.write("%s\t%s\n" % (word, label))
+                
+    with open('data_dev.tsv', 'w') as f:
+        for idx in range(len(dev_sequence_lengths)):
+            for subidx in range(dev_sequence_lengths[idx]):
+                word = get_word_from_idx(index_of_word_in_lookup_table, dev_sentences[idx][subidx])
+                label = labels_template[dev_labels[idx][subidx]]
+                f.write("%s\t%s\n" % (word, label))
