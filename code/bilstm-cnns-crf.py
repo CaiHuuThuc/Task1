@@ -159,8 +159,7 @@ with tf.Session(config = config) as sess:
                                                         chars_placeholder: chars_indices.reshape(1, -1),
                                                         dropout_prob_placeholder: 1.0
                                                         })
-        precision, recall, F1 = my_eval(sent, label, predict, sequence_length)
-        print("Sentence #%d. Precision: %f\tRecall: %f\tF1: %f" % (idx, precision, recall, F1))
+
         sent = sent[0]
         label = label[0]
         if sequence_length[0] > 0:
