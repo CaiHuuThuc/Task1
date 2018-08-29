@@ -66,9 +66,7 @@ def my_eval(sentences, labels, predicts, lengths):
     precision = float(TP) / (TP + FP)
     recall = float(TP) / (TP + FN)
     F1 = 2 * precision * recall / (precision + recall)
-    tf.summary.scalar("Precision", precision)
-    tf.summary.scalar("Recall", recall)
-    tf.summary.scalar("F1-score", F1)
+    
     return precision, recall, F1
 if __name__ == '__main__':
     sentences, labels, predicts = readFileTSV()

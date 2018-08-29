@@ -31,7 +31,7 @@ embedding_size = 200
 char_embedding_size = 16
 char_representation_size = 30
 num_classes = len(labels_template)
-hidden_size_lstm = 320
+hidden_size_lstm = 200
 dropout_prob = 0.5
 n_epochs = 100
 batch_size = 50
@@ -102,6 +102,7 @@ with tf.name_scope('crf_encode'):
 with tf.name_scope('crf_decode'):
     viterbi_sequence, viterbi_score = tf.contrib.crf.crf_decode(logits, trans_params, sequence_lengths_placeholder)
 
+
 with tf.name_scope('optimizer'):
     optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=momentum)
 
@@ -110,6 +111,7 @@ with tf.name_scope('optimizer'):
     train_op = optimizer.apply_gradients(capped_gvs)
 
 config = tf.ConfigProto(allow_soft_placement = True)
+
 with tf.Session(config = config) as sess:
     sess.run( tf.global_variables_initializer())
     print("Training: Start")
@@ -119,7 +121,7 @@ with tf.Session(config = config) as sess:
     timer = time()
     for batch in batches: 
         sent_batch, label_batch, sequence_length_batch = batch
-        loss_, _, predicts = sess.run([loss, optimizer, viterbi_sequence], feed_dict={
+        loss_, _, predicts = sess.run([loss, train_op, viterbi_sequence], feed_dict={
                                                                                 dropout_prob_placeholder: dropout_prob,
                                                                                 sentences_placeholder: sent_batch, 
                                                                                 labels_placeholder: label_batch, 
@@ -129,12 +131,11 @@ with tf.Session(config = config) as sess:
                                                                                 
                                                                             })
         step += 1
-        if step % 100 == 0:
+        if step % 20 == 0:
             precision, recall, F1 = my_eval(sent_batch, label_batch, predicts, sequence_length_batch)
             print("Step %d/%d Loss: %f\tPrecision: %f\tRecall: %f\tF1: %f" % (step, n_batches*n_epochs, loss_, precision, recall, F1), end='\t')
             print('Took %fs' % (time() - timer))
             timer = time()
-            break
         
     print()
 
@@ -155,8 +156,11 @@ with tf.Session(config = config) as sess:
         predict = sess.run(viterbi_sequence, feed_dict={sentences_placeholder: sent,
                                                         labels_placeholder: label,
                                                         sequence_lengths_placeholder: sequence_length,
-                                                        chars_placeholder: chars_indices.reshape(1, -1)
+                                                        chars_placeholder: chars_indices.reshape(1, -1),
+                                                        dropout_prob_placeholder: 1.0
                                                         })
+        precision, recall, F1 = my_eval(sent, label, predict, sequence_length)
+        print("Sentence #%d. Precision: %f\tRecall: %f\tF1: %f" % (idx, precision, recall, F1))
         sent = sent[0]
         label = label[0]
         if sequence_length[0] > 0:

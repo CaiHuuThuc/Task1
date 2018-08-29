@@ -2,17 +2,11 @@ import os
 import shelve
 import numpy as np
 import tensorflow as tf
-<<<<<<< HEAD
 from time import time
 from Task1_datahelper import load_from_file, word_2_indices_per_char, decode_labels, batch_iter, get_word_from_idx
 from my_eval import my_eval
 from math import sqrt
-=======
-import time
-import csv
-from Task1_datahelper import *
 
->>>>>>> abf7ed34cd308cf122d0141a4b7ab64e052425bb
 data = load_from_file()
 
 max_doc_len = data['max_doc_len']
@@ -44,7 +38,7 @@ gradient_limit = 5.0
 sentences_placeholder = tf.placeholder(tf.int32, shape=[None, max_doc_len], name='sentences')
 labels_placeholder = tf.placeholder(tf.int32, shape=[None,max_doc_len], name='labels')
 sequence_lengths_placeholder = tf.placeholder(tf.int32, shape=[None], name='lengths')
-
+dropout_prob_placeholder = tf.placeholder(tf.float32, name="dropout_prob")
 
 with tf.variable_scope('word-embedding-layer'):
     W_embedding = tf.Variable(initial_value=word_lookup_table, dtype=tf.float32, trainable=False, name='word-embedding')
@@ -57,13 +51,15 @@ with tf.variable_scope("bi-lstm"):
                                 cell_fw, cell_bw, vectors, \
                                 sequence_length=sequence_lengths_placeholder, dtype=tf.float32)
     output = tf.concat([output_fw, output_bw], axis=-1)
-    output = tf.nn.dropout(output, dropout_prob)
+    output = tf.nn.dropout(output, dropout_prob_placeholder)
 
 with tf.variable_scope("projection"):
     r_plus_c = 2*hidden_size_lstm + num_classes
-    W = tf.get_variable("W", dtype=tf.float32, initializer=np.random.uniform(-sqrt(6.0/r_plus_c), sqrt(6.0/r_plus_c)),shape=[2*hidden_size_lstm, num_classes])
+    W = tf.get_variable("W", dtype=tf.float32, \
+                        initializer=tf.constant_initializer(np.random.uniform(-sqrt(6.0/r_plus_c), sqrt(6.0/r_plus_c))),\
+                        shape=[2*hidden_size_lstm, num_classes])
 
-    b = tf.get_variable("b", shape=[num_classes],dtype=tf.float32, initializer=np.random.uniform(-sqrt(6.0/r_plus_c), sqrt(6.0/r_plus_c)))
+    b = tf.get_variable("b", shape=[num_classes],dtype=tf.float32, initializer=tf.constant_initializer(np.random.uniform(-sqrt(6.0/r_plus_c), sqrt(6.0/r_plus_c))))
 
     output = tf.reshape(output, [-1, 2*hidden_size_lstm])
     pred = tf.matmul(output, W) + b
@@ -106,12 +102,12 @@ with tf.Session() as sess:
         loss_,_, predicts= sess.run([loss, train_op, viterbi_sequence], feed_dict={
                                                                                 sentences_placeholder: sent_batch, 
                                                                                 labels_placeholder: label_batch, 
-                                                                                sequence_lengths_placeholder: sequence_length_batch
+                                                                                sequence_lengths_placeholder: sequence_length_batch,
+                                                                                dropout_prob_placeholder: dropout_prob
                                                                             })
         precision, recall, F1 = my_eval(sent_batch, decode_labels(label_batch, labels_template), decode_labels(predicts, labels_template), sequence_length_batch)
         step += 1
-        if step % 100 == 0:
-<<<<<<< HEAD
+        if step % 20 == 0:
             summary['step'].append(step)
             summary['loss'].append(loss_)
             summary['precision'].append(precision)
@@ -121,13 +117,7 @@ with tf.Session() as sess:
             print('Took %fs' % (time() - timer))
             timer = time()
             saver.save(sess, '../saved-model/baseline/baseline', global_step=step)
-
-=======
-            print("Step %d/%d Loss: %f" % (step, n_batches*n_epochs, loss_), end='\t')
-            print('Took %fs' % (time() - timer))
             timer = time()
-            
->>>>>>> abf7ed34cd308cf122d0141a4b7ab64e052425bb
     print()
 
     del train_sentences, train_labels, train_sequence_lengths
@@ -144,7 +134,10 @@ with tf.Session() as sess:
 
         predict = sess.run(viterbi_sequence, feed_dict={sentences_placeholder: sent,
                                                         labels_placeholder: label,
-                                                        sequence_lengths_placeholder: sequence_length})
+                                                        sequence_lengths_placeholder: sequence_length,
+                                                        dropout_prob_placeholder: 1.0
+                                                        })
+
         sent = sent[0]
         label = label[0]
         if sequence_length[0] > 0:

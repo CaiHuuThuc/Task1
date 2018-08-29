@@ -230,7 +230,7 @@ def load_from_file(filename='../train_dev_data.shlv'):
     return data
 
 
-def next_lr(lr, p=0.05, t=180):
+def next_lr(lr, p=0.05, t=100):
     return 1.0*lr/(1.0 + p*t)
 
 if __name__ == '__main__':
