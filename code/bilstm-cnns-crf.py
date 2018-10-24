@@ -9,12 +9,15 @@ import sys
 
 type_embeddings = sys.argv[1].strip()
 tagging = sys.argv[2].strip()
-print(type_embeddings)
-print(tagging)
+
+print()
+print("Type embeddings: %s " % type_embeddings)
+print("Tagging: %s" % tagging)
+
+
 data = load_from_file("../data_feed_model/%s_%s.shlv" % (type_embeddings, tagging))
 
 
-max_doc_len = data['max_doc_len']
 max_word_len = data['max_word_len']
 labels_template = data['labels_template']
 
@@ -36,7 +39,7 @@ char_representation_size = 30
 num_classes = len(labels_template)
 hidden_size_lstm = 200
 dropout_prob = 0.5
-n_epochs = 100
+n_epochs = 50
 batch_size = 10
 n_batches = int(train_sentences.shape[0]//batch_size) + 1
 learning_rate = 0.015
@@ -47,16 +50,19 @@ label_train = dict()
 label_dev = dict()
 
 
-chars_placeholder = tf.placeholder(tf.int32, shape=[None, max_doc_len, max_word_len], name="characters")
-sentences_placeholder = tf.placeholder(tf.int32, shape=[None, max_doc_len], name='sentences')
-labels_placeholder = tf.placeholder(tf.int32, shape=[None,max_doc_len], name='labels')
+chars_placeholder = tf.placeholder(tf.int32, shape=[None, None, max_word_len], name="characters")
+sentences_placeholder = tf.placeholder(tf.int32, shape=[None, None], name='sentences')
+labels_placeholder = tf.placeholder(tf.int32, shape=[None, None], name='labels')
 sequence_lengths_placeholder = tf.placeholder(tf.int32, shape=[None], name='lengths')
-dropout_prob_placeholder = tf.placeholder_with_default(1.0, shape=())
+dropout_prob_placeholder = tf.placeholder_with_default(1.0, shape=(), name='dropout')
+lr_placeholer = tf.placeholder(tf.float64, name='lr')
+max_sentences_length_placeholder = tf.placeholder(tf.int32, name='max_sentences_length_in_batch')
 
+print(chars_placeholder.name)
 with tf.device("/device:gpu:0"), tf.variable_scope('char-embedding', reuse=tf.AUTO_REUSE):
     W_char_embedding = tf.get_variable(name="char-embedding", \
                                         initializer=tf.constant_initializer(np.random.uniform(-sqrt(3.0/char_embedding_size), sqrt(3.0/char_embedding_size))),\
-                                        shape=[len(char_dict.keys()), char_embedding_size])
+                                        shape=[len(char_dict.keys()), char_embedding_size], trainable=True)
     char_embedding = tf.nn.embedding_lookup(W_char_embedding, chars_placeholder)
     char_embedding = tf.nn.dropout(char_embedding, dropout_prob_placeholder)
 with tf.device("/device:gpu:0"), tf.variable_scope('char-cnn', reuse=tf.AUTO_REUSE):
@@ -72,14 +78,16 @@ with tf.device("/device:gpu:0"), tf.variable_scope('char-cnn', reuse=tf.AUTO_REU
     pool = tf.nn.max_pool(relu, ksize=[1, 1, max_word_len, 1], 
                               strides = [1, 1, max_word_len, 1], padding='VALID', name='pool')
 
-    char_representation = tf.reshape(pool, [-1, max_doc_len, char_representation_size])
+    char_representation = tf.reshape(pool, [-1, max_sentences_length_placeholder, char_representation_size])
 
 with tf.device("/device:gpu:0"), tf.variable_scope('word-embedding'):
     W_embedding = tf.Variable(name='word-embedding', initial_value=word_lookup_table, dtype=tf.float32, trainable=True)
-    vectors = tf.nn.embedding_lookup(W_embedding, sentences_placeholder)
+    vectors = tf.nn.embedding_lookup(W_embedding, sentences_placeholder, name='vectors')
     word_embedding_with_char_representation = tf.concat([vectors, char_representation], axis=2)
     word_embedding_with_char_representation = tf.nn.dropout(word_embedding_with_char_representation, dropout_prob_placeholder)
-
+    print('\n\n\n')
+    print(vectors.name)
+    print('\n\n\n')
 with tf.device("/device:gpu:0"), tf.variable_scope("bi-lstm"):
     cell_fw = tf.contrib.rnn.LSTMCell(hidden_size_lstm)
     cell_bw = tf.contrib.rnn.LSTMCell(hidden_size_lstm)
@@ -99,7 +107,7 @@ with tf.device("/device:gpu:0"), tf.variable_scope("projection", reuse=tf.AUTO_R
     output = tf.reshape(output, [-1, 2*hidden_size_lstm])
     pred = tf.matmul(output, W) + b
    
-    logits = tf.reshape(pred, [-1, max_doc_len, num_classes])
+    logits = tf.reshape(pred, [-1, max_sentences_length_placeholder, num_classes])
 
 with tf.device("/device:gpu:0"), tf.name_scope('crf_encode'):
 
@@ -108,6 +116,9 @@ with tf.device("/device:gpu:0"), tf.name_scope('crf_encode'):
 with tf.device("/device:gpu:0"), tf.name_scope('crf_decode'):
     viterbi_sequence, viterbi_score = tf.contrib.crf.crf_decode(logits, trans_params, sequence_lengths_placeholder)
 
+    print('\n\n\n')
+    print(viterbi_sequence.name)
+    print('\n\n\n')
 
 with tf.device("/device:gpu:0"), tf.name_scope('optimizer'):
     optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=momentum)
@@ -123,29 +134,43 @@ with tf.Session(config = config) as sess:
     print("Training: Start")
 
     step = 0
-    batches = batch_iter(train_sentences, train_labels, train_sequence_lengths, batch_size=batch_size, num_epochs=n_epochs, shuffle=True)
+    batches = batch_iter(train_sentences, train_labels, train_sequence_lengths, map_word_id[''], labels_template.index('PAD'), batch_size=batch_size, num_epochs=n_epochs, shuffle=True)
     timer = time()
     for batch in batches: 
-        sent_batch, label_batch, sequence_length_batch = batch
+        sent_batch, label_batch, sequence_length_batch, max_sentences_length_in_batch = batch
         loss_, _, predicts = sess.run([loss, train_op, viterbi_sequence], feed_dict={
                                                                                 dropout_prob_placeholder: dropout_prob,
                                                                                 sentences_placeholder: sent_batch, 
                                                                                 labels_placeholder: label_batch, 
                                                                                 sequence_lengths_placeholder: sequence_length_batch,
+                                                                                max_sentences_length_placeholder: max_sentences_length_in_batch,
                                                                                 chars_placeholder: word_indices_to_char_indices(sent_batch, \
-                                                                                        sequence_length_batch, max_doc_len, max_word_len, char_dict, map_id_word)
+                                                                                        sequence_length_batch, max_sentences_length_in_batch, max_word_len, char_dict, map_id_word)
                                                                                 
                                                                             })
         step += 1
-        if step % n_batches == 0:
-            print("Step %d/%d Loss: %f" % (step, n_batches*n_epochs, loss_), end='\t')
-            print('Took %fs' % (time() - timer))
+        if step % n_batches == 0 or step >= n_batches*n_epochs - 1:
+            print("Step %d/%d Loss: %f" % (step, n_batches*n_epochs, loss_), end=' ')
+            print('Took %fs' % (time() - timer), end=' ')
+            print('avg each step %fs' % ((time() - timer)/n_batches))
             timer = time()
-    
+        break
+
     print()
 
-    del train_sentences, train_labels, train_sequence_lengths
+    saver = tf.train.Saver()
+
+    saved_model_folder = '../saved_model/'
+    if os.path.isdir(saved_model_folder) == False:
+        os.mkdir(saved_model_folder)
+
+    if os.path.isdir(os.path.join(saved_model_folder, '%s-%s' % (type_embeddings, tagging))) == False:
+        os.mkdir(os.path.join(saved_model_folder, '%s-%s' % (type_embeddings, tagging)))
+
+    saver.save(sess, os.path.join(saved_model_folder, '%s-%s' % (type_embeddings, tagging), 'ckpt'))
+    
     print("Training: Done")
+    
     
     print("\n\n\n")
     
@@ -159,11 +184,14 @@ with tf.Session(config = config) as sess:
         sequence_length = np.array([dev_sequence_lengths[idx]])
 
         # print(sequence_length)
-        chars_indices = word_indices_to_char_indices(sent, sequence_length, max_doc_len, max_word_len, char_dict, map_id_word)
+        max_sentences_length_in_batch = sent.shape[1]
+
+        chars_indices = word_indices_to_char_indices(sent, sequence_length, max_sentences_length_in_batch, max_word_len, char_dict, map_id_word)
         predict = sess.run(viterbi_sequence, feed_dict={sentences_placeholder: sent,
                                                         labels_placeholder: label,
                                                         sequence_lengths_placeholder: sequence_length,
                                                         chars_placeholder: chars_indices,
+                                                        max_sentences_length_placeholder: max_sentences_length_in_batch,
                                                         dropout_prob_placeholder: 1.0
                                                         })
 
